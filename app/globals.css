@@ -148,6 +148,26 @@ th.num button { text-align: right; }
 details.card summary { cursor: pointer; font-weight: 600; }
 details.card ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 74ch; line-height: 1.55; }
 
+.userbar {
+  max-width: 1240px; margin: 0 auto; padding-top: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: flex-end; align-items: center; gap: 10px; font-size: 12px; color: var(--muted);
+}
+.userbar button { font: inherit; background: none; border: 1px solid var(--line); border-radius: var(--radius); color: var(--fg); padding: 3px 10px; cursor: pointer; }
+
+.signin {
+  min-height: 100vh; display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.signin-card { width: min(100%, 24rem); padding: 28px; gap: 14px; }
+.signin-card h1 { font-size: 24px; }
+.signin-card .error { margin: 0; font-size: 13px; }
+.primary {
+  font: inherit; font-weight: 600; width: 100%; padding: 10px 14px; cursor: pointer;
+  background: var(--accent); color: #fff; border: 0; border-radius: var(--radius);
+}
+.primary:hover { filter: brightness(1.08); }
+
 @media (max-width: 560px) {
   h1 { font-size: 24px; }
   .bar { grid-template-columns: minmax(0, 1fr) auto; }
