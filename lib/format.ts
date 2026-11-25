@@ -61,9 +61,14 @@ export function segmentLabel(dim: string, v: string): string {
   return v;
 }
 
+/** Postgres timestamptz text ("2026-11-25 09:00:01.2+00") as a Date. */
+export function parseTs(ts: string): Date {
+  return new Date(ts.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00'));
+}
+
 export function relativeTime(ts: string | null): string {
   if (!ts) return 'ще не оновлювалось';
-  const d = new Date(ts.replace(' ', 'T'));
+  const d = parseTs(ts);
   if (isNaN(d.getTime())) return ts;
   const h = (Date.now() - d.getTime()) / 3600000;
   if (h < 1) return 'оновлено щойно';

@@ -18,7 +18,7 @@ function derive(s: Sums): Totals {
 const SUMS = `coalesce(sum(spend),0)::float8 as spend, coalesce(sum(impressions),0)::float8 as impressions,
   coalesce(sum(link_clicks),0)::float8 as link_clicks, coalesce(sum(leads),0)::float8 as leads`;
 
-function resolvePeriod(preset: Preset, bounds: { min: string; max: string }, from?: string, to?: string) {
+export function resolvePeriod(preset: Preset, bounds: { min: string; max: string }, from?: string, to?: string) {
   const { min, max } = bounds;
   let f: string, t = max;
   switch (preset) {
@@ -44,17 +44,17 @@ async function totals(client: string, from: string, to: string): Promise<Totals>
   const [r] = await q<Sums>(
     `select ${SUMS}, coalesce(sum(video_3s),0)::float8 as video_3s,
        coalesce(sum(impressions) filter (where video_3s > 0),0)::float8 as vimpr
-     from ad_daily where client = $1 and date between $2 and $3`, [client, from, to]);
+     from ad_daily where ($1 = 'all' or client = $1) and date between $2 and $3`, [client, from, to]);
   return derive(r);
 }
 
-export async function dashboard(opts: { client: ClientId; preset: Preset; from?: string; to?: string; dim: Dim }): Promise<DashboardData> {
+export async function dashboard(opts: { client: ClientId | 'all'; preset: Preset; from?: string; to?: string; dim: Dim }): Promise<DashboardData> {
   const { client, dim } = opts;
   const [b] = await q<{ min: string | null; max: string | null }>(
     `select to_char(min(date),'YYYY-MM-DD') as min, to_char(max(date),'YYYY-MM-DD') as max from ad_daily`);
-  const [ls] = await q<{ at: string | null }>(`select max(ran_at)::text as at from sync_log where ok`);
+  const [ls] = await q<{ at: string | null }>(`select max(ran_at)::text as at from sync_log where ok and kind in ('cron', 'month', 'backfill')`);
   const empty: DashboardData = {
-    client, clientName: CLIENTS[client], bounds: null, period: null, lastSync: ls?.at ?? null, kpi: null,
+    client, clientName: client === 'all' ? 'Усі клієнти' : CLIENTS[client], bounds: null, period: null, lastSync: ls?.at ?? null, kpi: null,
     trend: [], positions: [], campaigns: [], ads: [], alerts: null,
     segments: { dim, fromMonth: '', toMonth: '', avgCpl: null, rows: [] },
   };
@@ -69,16 +69,16 @@ export async function dashboard(opts: { client: ClientId; preset: Preset; from?:
     period.prevFrom && period.prevTo ? totals(client, period.prevFrom, period.prevTo) : Promise.resolve(null),
     q<Sums & { bucket: string }>(
       `select to_char(date_trunc($4, date), 'YYYY-MM-DD') as bucket, ${SUMS}
-       from ad_daily where client = $1 and date between $2 and $3 group by 1 order by 1`,
+       from ad_daily where ($1 = 'all' or client = $1) and date between $2 and $3 group by 1 order by 1`,
       [client, from, to, period.granularity]),
     q<Sums & { position: string }>(
-      `select position, ${SUMS} from ad_daily where client = $1 and date between $2 and $3
+      `select position, ${SUMS} from ad_daily where ($1 = 'all' or client = $1) and date between $2 and $3
        group by position order by spend desc`, [client, from, to]),
     q<Sums & { campaign_id: string; campaign: string; brand: string; position: string; status: string | null }>(
       `select d.campaign_id, max(d.campaign) as campaign, max(d.brand) as brand, max(d.position) as position,
               max(e.status) as status, ${SUMS.replace(/sum\((\w+)\)/g, 'sum(d.$1)')}
        from ad_daily d left join entities e on e.id = d.campaign_id
-       where d.client = $1 and d.date between $2 and $3
+       where ($1 = 'all' or d.client = $1) and d.date between $2 and $3
        group by d.campaign_id having sum(d.spend) > 0 order by spend desc`, [client, from, to]),
     q<Sums & { ad_id: string; ad: string; campaign: string; status: string | null }>(
       `select d.ad_id, max(d.ad) as ad, max(d.campaign) as campaign, max(e.status) as status,
@@ -86,20 +86,20 @@ export async function dashboard(opts: { client: ClientId; preset: Preset; from?:
               coalesce(sum(d.video_3s),0)::float8 as video_3s,
               coalesce(sum(d.impressions) filter (where d.video_3s > 0),0)::float8 as vimpr
        from ad_daily d left join entities e on e.id = d.ad_id
-       where d.client = $1 and d.date between $2 and $3
+       where ($1 = 'all' or d.client = $1) and d.date between $2 and $3
        group by d.ad_id having sum(d.spend) > 0 order by spend desc`, [client, from, to]),
     q<Sums & { id: string; name: string; status: string | null }>(
       `select d.campaign_id as id, max(d.campaign) as name, max(e.status) as status, ${SUMS.replace(/sum\((\w+)\)/g, 'sum(d.$1)')}
        from ad_daily d left join entities e on e.id = d.campaign_id
-       where d.client = $1 and d.date between $2 and $3 group by d.campaign_id`, [client, alertFrom, bounds.max]),
+       where ($1 = 'all' or d.client = $1) and d.date between $2 and $3 group by d.campaign_id`, [client, alertFrom, bounds.max]),
     q<Sums & { id: string; name: string; campaign: string; status: string | null }>(
       `select d.ad_id as id, max(d.ad) as name, max(d.campaign) as campaign, max(e.status) as status, ${SUMS.replace(/sum\((\w+)\)/g, 'sum(d.$1)')}
        from ad_daily d left join entities e on e.id = d.ad_id
-       where d.client = $1 and d.date between $2 and $3 group by d.ad_id`, [client, alertFrom, bounds.max]),
+       where ($1 = 'all' or d.client = $1) and d.date between $2 and $3 group by d.ad_id`, [client, alertFrom, bounds.max]),
     totals(client, alertFrom, bounds.max),
     q<Sums & { segment: string }>(
       `select segment, ${SUMS} from segments
-       where client = $1 and dimension = $2 and month between $3 and $4
+       where ($1 = 'all' or client = $1) and dimension = $2 and month between $3 and $4
        group by segment`, [client, dim, monthStart(from), to]),
   ]);
 
@@ -155,7 +155,7 @@ export async function dashboard(opts: { client: ClientId; preset: Preset; from?:
     : segRows.sort((a, b) => b.spend - a.spend).slice(0, 14);
 
   return {
-    client, clientName: CLIENTS[client], bounds, period, lastSync: ls?.at ?? null,
+    client, clientName: client === 'all' ? 'Усі клієнти' : CLIENTS[client], bounds, period, lastSync: ls?.at ?? null,
     kpi: { cur, prev },
     trend, positions, campaigns, ads,
     alerts: { from: alertFrom, to: bounds.max, avgCpl: avg, rows: alertRows.slice(0, 8) },

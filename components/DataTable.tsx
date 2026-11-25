@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp } from '@phosphor-icons/react';
 
 export type Column<T> = {
   key: string;
@@ -50,7 +51,7 @@ export default function DataTable<T>({ rows, columns, rowKey, initialSort, limit
                   aria-sort={sortKey === c.key ? (asc ? 'ascending' : 'descending') : undefined}>
                   {c.sort ? (
                     <button type="button" onClick={() => { if (sortKey === c.key) setAsc(!asc); else { setSortKey(c.key); setAsc(!c.num); } }}>
-                      {c.label}{sortKey === c.key ? (asc ? ' ↑' : ' ↓') : ''}
+                      {c.label}{sortKey === c.key && (asc ? <ArrowUp size={12} weight="bold" aria-hidden="true" /> : <ArrowDown size={12} weight="bold" aria-hidden="true" />)}
                     </button>
                   ) : c.label}
                 </th>
@@ -59,7 +60,7 @@ export default function DataTable<T>({ rows, columns, rowKey, initialSort, limit
           </thead>
           <tbody>
             {shown.length === 0 ? (
-              <tr><td colSpan={columns.length} className="empty">{empty}</td></tr>
+              <tr><td colSpan={columns.length} className="ink-3">{empty}</td></tr>
             ) : shown.map((r) => (
               <tr key={rowKey(r)}>
                 {columns.map((c) => <td key={c.key} className={[c.num ? 'num' : '', c.className ?? ''].join(' ').trim() || undefined}>{c.render(r)}</td>)}
@@ -69,7 +70,7 @@ export default function DataTable<T>({ rows, columns, rowKey, initialSort, limit
         </table>
       </div>
       {limit && rows.length > limit && (
-        <button type="button" className="more" onClick={() => setAll(!all)}>
+        <button type="button" className="btn button-sm more" onClick={() => setAll(!all)}>
           {all ? 'Згорнути' : `Показати всі (${rows.length})`}
         </button>
       )}

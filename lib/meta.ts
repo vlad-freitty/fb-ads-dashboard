@@ -18,7 +18,7 @@ function token(): string {
   return t;
 }
 
-async function request(url: string, retries = 4): Promise<Json> {
+export async function request(url: string, retries = 4): Promise<Json> {
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {
@@ -47,6 +47,26 @@ export async function get(path: string, params: Record<string, string | number> 
   const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])), access_token: token() });
   return request(`${base()}/${path.replace(/^\//, '')}?${qs}`);
 }
+
+/** GET with an explicit token and host (page tokens, graph.threads.net). */
+export async function getAs(accessToken: string, path: string, params: Record<string, string | number> = {},
+  host = base()): Promise<Json> {
+  const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])), access_token: accessToken });
+  return request(`${host}/${path.replace(/^\//, '')}?${qs}`, 2);
+}
+
+export async function getAllAs(accessToken: string, path: string, params: Record<string, string | number> = {},
+  host = base(), maxPages = 40): Promise<Json[]> {
+  let page = await getAs(accessToken, path, params, host);
+  const rows: Json[] = [...(page.data ?? [])];
+  for (let i = 1; page.paging?.next && i < maxPages; i++) {
+    page = await request(page.paging.next, 2);
+    rows.push(...(page.data ?? []));
+  }
+  return rows;
+}
+
+export function metaToken(): string { return token(); }
 
 export async function getAll(path: string, params: Record<string, string | number> = {}): Promise<Json[]> {
   let page = await get(path, params);

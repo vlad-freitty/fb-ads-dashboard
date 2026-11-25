@@ -5,6 +5,8 @@ import { authConfig, currentUser } from '@/lib/auth/session';
 import { landing, notConfigured } from '@/lib/auth/pages';
 
 export async function middleware(request: NextRequest) {
+  // local preview only (npm run dev with DEV_SKIP_AUTH=1); production builds ignore it
+  if (process.env.NODE_ENV === 'development' && process.env.DEV_SKIP_AUTH === '1') return NextResponse.next();
   const cfg = authConfig();
   if (cfg.missing.length) return notConfigured(cfg.missing);
   if (await currentUser(request)) return NextResponse.next();
@@ -17,5 +19,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/auth/|api/cron/|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/auth/|api/cron/|_next/static|_next/image|favicon.ico|icon.svg).*)'],
 };

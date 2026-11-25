@@ -12,12 +12,12 @@ const DIMS: Dim[] = ['age_gender', 'placement', 'device', 'region'];
 
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
-  const client = (sp.get('client') ?? 'greenline') as ClientId;
+  const client = (sp.get('client') ?? 'all') as ClientId | 'all';
   const preset = (sp.get('preset') ?? '30') as Preset;
   const dim = (sp.get('dim') ?? 'age_gender') as Dim;
   const from = sp.get('from') ?? undefined;
   const to = sp.get('to') ?? undefined;
-  if (!(client in CLIENTS) || !PRESETS.includes(preset) || !DIMS.includes(dim)
+  if (!(client === 'all' || client in CLIENTS) || !PRESETS.includes(preset) || !DIMS.includes(dim)
       || (from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) {
     return NextResponse.json({ error: 'Невірні параметри запиту' }, { status: 400 });
   }

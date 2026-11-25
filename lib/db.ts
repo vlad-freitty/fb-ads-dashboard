@@ -11,8 +11,23 @@ export function sql() {
   return client;
 }
 
+// Development only: DATABASE_URL=pglite:./.pglite runs an embedded Postgres on disk, so the app
+// can be tried locally without a Neon database. Production always uses Neon.
+let lite: Promise<{ query: (t: string, p?: unknown[]) => Promise<{ rows: unknown[] }> }> | null = null;
+function pglite() {
+  lite ??= (async () => {
+    const mod = '@electric-sql/pglite';
+    const { PGlite } = await import(/* webpackIgnore: true */ mod);
+    return new PGlite((process.env.DATABASE_URL as string).slice('pglite:'.length) || './.pglite');
+  })();
+  return lite;
+}
+
 /** Parameterised query returning plain row objects. */
 export async function q<T = Record<string, any>>(text: string, params: unknown[] = []): Promise<T[]> {
+  if (process.env.NODE_ENV !== 'production' && process.env.DATABASE_URL?.startsWith('pglite:')) {
+    return (await (await pglite()).query(text, params)).rows as T[];
+  }
   return (await sql().query(text, params)) as T[];
 }
 
@@ -56,6 +71,54 @@ const SCHEMA = [
      link_clicks bigint not null default 0,
      leads integer not null default 0,
      primary key (month, account_id, client, dimension, segment))`,
+  // organic: one row per social account (Facebook page, Instagram, Threads)
+  `create table if not exists org_accounts (
+     platform text not null,
+     account_id text not null,
+     name text,
+     username text,
+     brand text not null,
+     client text not null,
+     followers bigint,
+     picture text,
+     connected boolean not null default true,
+     note text,
+     updated_at timestamptz not null default now(),
+     primary key (platform, account_id))`,
+  // organic: daily account totals; a null means the platform does not report that metric
+  `create table if not exists org_daily (
+     date date not null,
+     platform text not null,
+     account_id text not null,
+     views bigint,
+     reach bigint,
+     interactions bigint,
+     new_followers bigint,
+     unfollows bigint,
+     followers bigint,
+     profile_views bigint,
+     synced_at timestamptz not null default now(),
+     primary key (date, platform, account_id))`,
+  // organic: posts with lifetime metrics as of the last refresh
+  `create table if not exists org_posts (
+     platform text not null,
+     post_id text not null,
+     account_id text not null,
+     created_at timestamptz not null,
+     type text,
+     text text,
+     permalink text,
+     thumb text,
+     views bigint,
+     reach bigint,
+     likes bigint,
+     comments bigint,
+     shares bigint,
+     saves bigint,
+     interactions bigint,
+     synced_at timestamptz not null default now(),
+     primary key (platform, post_id))`,
+  `create index if not exists org_posts_created on org_posts (created_at)`,
   `create table if not exists sync_log (
      id serial primary key,
      ran_at timestamptz not null default now(),

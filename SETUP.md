@@ -96,6 +96,24 @@ Vercel → проєкт → **Settings** → **Environment Variables**. Для �
 
 ---
 
+## Органіка (Facebook, Instagram, Threads)
+
+Той самий токен Meta, але з додатковими дозволами:
+`read_insights`, `instagram_basic`, `instagram_manage_insights` (для Threads ще `threads_business_basic`).
+
+1. developers.facebook.com → застосунок **freitty-ads-dashboard** → **Use cases** → додай
+   **Manage everything on your Page** і **Manage messaging & content on Instagram** (варіант *API setup with Facebook login*).
+   У кожному: **Customize** → **Permissions** → **Add** біля потрібних дозволів.
+2. Business Settings → **System users** → `ads-dashboard` → **Generate new token**: постав галочки на 7 дозволах
+   (`ads_read`, `leads_retrieval`, `pages_show_list`, `pages_read_engagement`, `read_insights`, `instagram_basic`,
+   `instagram_manage_insights`) плюс `threads_business_basic`, термін **Never**.
+3. Vercel → **Settings** → **Environment Variables** → `META_ACCESS_TOKEN` → **Edit** → новий токен → **Save** → **Redeploy**.
+4. На дашборді вкладка **Органіка** → **«Завантажити історію»**. Meta віддає органіку приблизно за 2 роки.
+
+Далі органіка оновлюється сама щоранку (о 09:20 UTC).
+
+---
+
 ## Якщо щось не так
 
 | Що бачиш | Що робити |
@@ -105,3 +123,4 @@ Vercel → проєкт → **Settings** → **Environment Variables**. Для �
 | Microsoft пише про `response_type 'id_token' is not enabled` / AADSTS700054 | Не стоїть галочка **ID tokens** (крок 3.1, пункт 4). |
 | «Доступ до дашборда не надано» | Людину не додано в **Users and groups** (крок 3.3). |
 | Завантаження історії зупинилось з помилкою | Натисни кнопку ще раз, вона продовжить з того місяця, де зупинилась. |
+| В «Органіці» немає Instagram або Threads | Токен без потрібних дозволів (див. розділ «Органіка»), або Instagram не привʼязаний до сторінки Facebook. |

@@ -1,20 +1,22 @@
 import type { Metadata } from 'next';
-import { Inter, Space_Grotesk } from 'next/font/google';
+import { Manrope } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-body', display: 'swap' });
-const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
+const manrope = Manrope({ subsets: ['latin', 'cyrillic'], variable: '--font-manrope', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Freight Box Hub Ads',
-  description: 'Facebook Ads: ліди, витрати і ціна ліда по клієнтах Freight Box Hub',
+  title: 'Freight Box Hub · Аналітика Meta',
+  description: 'Реклама й органіка в Meta: ліди, ціна ліда, підписники, перегляди і найкращі публікації',
   robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="uk" className={`${inter.variable} ${grotesk.variable}`}>
-      <body>{children}</body>
+    <html lang="uk" className={manrope.variable}>
+      <body>
+        <a href="#main" className="skip caption-3">Перейти до вмісту</a>
+        {children}
+      </body>
     </html>
   );
 }
