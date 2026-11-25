@@ -244,6 +244,7 @@ type Post = { platform: Platform; post_id: string; account_id: string; created_a
 const FB_POST: [keyof Post, string[]][] = [
   ['views', ['post_media_view', 'post_impressions']],
   ['reach', ['post_total_media_view_unique', 'post_impressions_unique']],
+  ['likes', ['post_reactions_by_type_total']],
 ];
 const fbPostMetric = new Map<string, string | null>();
 
@@ -257,9 +258,29 @@ function fbType(p: Json): string {
   return 'text';
 }
 
+// Reaction and comment counts on posts need pages_read_user_content. Without it we read the posts
+// without those fields and take reactions from post insights; comments then stay unknown.
+let fbUserContent: boolean | null = null;
+const FB_POST_BASE = 'id,message,created_time,permalink_url,full_picture,status_type,attachments{media_type},shares';
+const FB_POST_COUNTS = ',reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)';
+
+async function fbPostList(acc: OrgAccount, since: string, until: string): Promise<Json[]> {
+  const params = { since: unix(since), until: unix(addDays(until, 1)), limit: 50 };
+  if (fbUserContent !== false) {
+    try {
+      const list = await getAllAs(acc.token, `${acc.id}/published_posts`, { fields: FB_POST_BASE + FB_POST_COUNTS, ...params });
+      fbUserContent = true;
+      return list;
+    } catch (e) {
+      if (!(e instanceof MetaError && e.code === 10)) throw e;
+      fbUserContent = false;
+    }
+  }
+  return getAllAs(acc.token, `${acc.id}/published_posts`, { fields: FB_POST_BASE, ...params });
+}
+
 async function fbPosts(acc: OrgAccount, since: string, until: string): Promise<Post[]> {
-  const base = 'id,message,created_time,permalink_url,full_picture,status_type,attachments{media_type},shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)';
-  const list = await getAllAs(acc.token, `${acc.id}/published_posts`, { fields: base, since: unix(since), until: unix(addDays(until, 1)), limit: 50 });
+  const list = await fbPostList(acc, since, until);
   if (!list.length) return [];
   // find which metric names this API version accepts, once
   for (const [field, names] of FB_POST) {
@@ -267,7 +288,7 @@ async function fbPosts(acc: OrgAccount, since: string, until: string): Promise<P
     fbPostMetric.set(field, null);
     for (const n of names) {
       try { await getAs(acc.token, `${list[0].id}/insights`, { metric: n }); fbPostMetric.set(field, n); break; }
-      catch (e) { if (!isInvalidMetric(e)) throw e; }
+      catch (e) { if (!isInvalidMetric(e) && !(e instanceof MetaError && e.code === 10)) throw e; }
     }
   }
   const metrics = FB_POST.map(([f]) => fbPostMetric.get(f)).filter(Boolean) as string[];
@@ -285,13 +306,13 @@ async function fbPosts(acc: OrgAccount, since: string, until: string): Promise<P
   const now = new Date().toISOString();
   return list.map((p) => {
     const m = ins.get(p.id) ?? {};
-    const likes = num(p.reactions?.summary?.total_count) ?? 0;
-    const comments = num(p.comments?.summary?.total_count) ?? 0;
+    const likes = num(p.reactions?.summary?.total_count) ?? m[fbPostMetric.get('likes') ?? ''] ?? null;
+    const comments = num(p.comments?.summary?.total_count);
     const shares = num(p.shares?.count) ?? 0;
     return { platform: 'facebook', post_id: p.id, account_id: acc.id, created_at: p.created_time, type: fbType(p),
       text: p.message ? String(p.message).slice(0, 500) : null, permalink: p.permalink_url ?? null, thumb: p.full_picture ?? null,
       views: m[fbPostMetric.get('views') ?? ''] ?? null, reach: m[fbPostMetric.get('reach') ?? ''] ?? null,
-      likes, comments, shares, saves: null, interactions: likes + comments + shares, synced_at: now };
+      likes, comments, shares, saves: null, interactions: (likes ?? 0) + (comments ?? 0) + shares, synced_at: now };
   });
 }
 
