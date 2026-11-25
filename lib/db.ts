@@ -64,8 +64,12 @@ const SCHEMA = [
      detail text)`,
 ];
 
-export async function ensureSchema() {
-  for (const stmt of SCHEMA) await q(stmt);
+let schemaReady: Promise<void> | null = null;
+
+/** Creates the tables if they do not exist yet (once per server instance). */
+export function ensureSchema(): Promise<void> {
+  schemaReady ??= (async () => { for (const stmt of SCHEMA) await q(stmt); })().catch((e) => { schemaReady = null; throw e; });
+  return schemaReady;
 }
 
 /** Insert or update rows in chunks. */

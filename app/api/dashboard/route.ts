@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dashboard } from '@/lib/queries';
+import { ensureSchema } from '@/lib/db';
 import { CLIENTS, type ClientId } from '@/lib/classify';
 import { ISO_DATE } from '@/lib/dates';
 import type { Dim, Preset } from '@/lib/types';
@@ -21,6 +22,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Невірні параметри запиту' }, { status: 400 });
   }
   try {
+    await ensureSchema();
     const data = await dashboard({ client, preset, from, to, dim });
     return NextResponse.json(data, { headers: { 'Cache-Control': 'private, max-age=60' } });
   } catch (e) {

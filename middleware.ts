@@ -1,26 +1,21 @@
-import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server';
-import { auth, entraConfigured } from '@/auth';
+// Gates the whole site behind a Microsoft sign-in (same as the GBP dashboard and the CS Wiki).
+// Only /api/auth/* and the Vercel cron route are reachable without a session.
+import { NextResponse, type NextRequest } from 'next/server';
+import { authConfig, currentUser } from '@/lib/auth/session';
+import { landing, notConfigured } from '@/lib/auth/pages';
 
-// Everything except sign-in itself and the cron route needs a Microsoft Entra session.
-// Until Entra is configured the site stays closed for everyone.
-const requireSession = auth((req) => {
-  if (req.auth?.user) return NextResponse.next();
-  if (req.nextUrl.pathname.startsWith('/api/')) {
-    return NextResponse.json({ error: 'Потрібно увійти' }, { status: 401 });
-  }
-  const url = new URL('/signin', req.nextUrl.origin);
-  url.searchParams.set('callbackUrl', req.nextUrl.pathname + req.nextUrl.search);
-  return NextResponse.redirect(url);
-});
+export async function middleware(request: NextRequest) {
+  const cfg = authConfig();
+  if (cfg.missing.length) return notConfigured(cfg.missing);
+  if (await currentUser(request)) return NextResponse.next();
 
-export default function middleware(req: NextRequest, ev: NextFetchEvent) {
-  if (req.nextUrl.pathname === '/signin') return NextResponse.next();
-  if (!entraConfigured()) {
-    return new NextResponse('Вхід через Microsoft ще не налаштований.', { status: 503 });
-  }
-  return (requireSession as unknown as (r: NextRequest, e: NextFetchEvent) => Promise<Response>)(req, ev);
+  const url = request.nextUrl;
+  const wantsPage = request.method === 'GET' && !url.pathname.startsWith('/api/')
+    && (request.headers.get('accept') || '').includes('text/html');
+  if (wantsPage) return landing({ ret: url.pathname + url.search });
+  return NextResponse.json({ error: 'signed_out' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|api/cron|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/auth/|api/cron/|_next/static|_next/image|favicon.ico).*)'],
 };

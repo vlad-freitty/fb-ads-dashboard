@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { AdRow, CampaignRow, DashboardData, Dim, PositionRow, Preset, Totals } from '@/lib/types';
-import { fullDay, int, money, pct, range, relativeTime, segmentLabel, signedPct } from '@/lib/format';
+import { fullDay, int, money, month as monthLabel, pct, range, relativeTime, segmentLabel, signedPct } from '@/lib/format';
 import { shortName } from '@/lib/classify';
 import TrendChart, { METRIC_LABEL, type Metric } from './TrendChart';
 import DataTable, { type Column } from './DataTable';
@@ -51,6 +51,73 @@ function Pill({ status, on }: { status: string | null; on: string }) {
   return <span className={'pill' + (active ? ' on' : '')}>{active ? on : status ? 'Пауза' : 'Невідомо'}</span>;
 }
 
+type MonthStatus = { account: string; month: string; loaded: boolean };
+
+/** Loads the ad account history into the database month by month (one request per month). */
+function HistoryLoader({ onProgress }: { onProgress: () => void }) {
+  const [months, setMonths] = useState<MonthStatus[] | null>(null);
+  const [running, setRunning] = useState(false);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/sync').then(async (r) => {
+      const b = await r.json();
+      if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);
+      setMonths(b.months);
+    }).catch((e) => setErr(e.message));
+  }, []);
+
+  if (!months && !err) return null;
+  const total = months?.length ?? 0;
+  const loaded = months?.filter((m) => m.loaded).length ?? 0;
+  if (months && total > 0 && loaded === total && !running) return null;
+
+  async function run() {
+    if (!months) return;
+    setRunning(true);
+    setErr(null);
+    const list = [...months];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].loaded) continue;
+      setCurrent(list[i].month);
+      try {
+        const r = await fetch(`/api/sync?account=${list[i].account}&month=${list[i].month}`, { method: 'POST' });
+        const b = await r.json();
+        if (!r.ok) throw new Error(b.error ?? `HTTP ${r.status}`);
+        list[i] = { ...list[i], loaded: true };
+        setMonths([...list]);
+        if (i % 6 === 5) onProgress();
+      } catch (e) {
+        setErr(`${monthLabel(list[i].month)}: ${(e as Error).message}. Натисніть кнопку ще раз, щоб продовжити.`);
+        break;
+      }
+    }
+    setRunning(false);
+    setCurrent(null);
+    onProgress();
+  }
+
+  return (
+    <section className="card" id="history">
+      <div className="card-head"><h2>Історія даних</h2></div>
+      <p className="note">
+        Дашборд зберігає статистику в базі з першого дня рекламного акаунта, тож дані не зникнуть.
+        Історію треба завантажити один раз: це займе кілька хвилин, сторінку в цей час не закривайте.
+        Далі нові дні додаються автоматично щоранку.
+      </p>
+      <div className="history">
+        <div className="progress" aria-hidden="true"><i style={{ width: total ? `${(loaded / total) * 100}%` : 0 }} /></div>
+        <span>Завантажено {loaded} з {total} міс.</span>
+        <button type="button" id="load-history" className="primary" disabled={running || !months} onClick={run}>
+          {running ? `Завантажую ${current ? monthLabel(current) : ''}…` : loaded ? 'Довантажити решту' : 'Завантажити всю історію'}
+        </button>
+      </div>
+      {err && <p className="note bad">{err}</p>}
+    </section>
+  );
+}
+
 type State = { client: string; preset: Preset; from: string; to: string; dim: Dim };
 
 function readUrl(): State {
@@ -66,6 +133,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => { setSt(readUrl()); }, []);
 
@@ -86,7 +154,7 @@ export default function Dashboard() {
       .catch((e) => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     return () => ctrl.abort();
-  }, [st]);
+  }, [st, reload]);
 
   const set = (patch: Partial<State>) => setSt((s) => (s ? { ...s, ...patch } : s));
 
@@ -176,10 +244,12 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <HistoryLoader onProgress={() => setReload((n) => n + 1)} />
+
       {error && <p className="state error">Не вдалося завантажити дані: {error}</p>}
       {!error && !data && <p className="state">Завантаження…</p>}
       {!error && data && !data.bounds && (
-        <p className="state">У базі ще немає даних. Запустіть первинне завантаження (npm run backfill) або дочекайтесь щоденного оновлення.</p>
+        <p className="state">У базі ще немає даних. Натисніть «Завантажити всю історію» вище.</p>
       )}
 
       {data?.bounds && cur && (

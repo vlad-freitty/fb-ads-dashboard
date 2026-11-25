@@ -1,18 +1,20 @@
+import { cookies } from 'next/headers';
 import Dashboard from '@/components/Dashboard';
-import { auth, signOut } from '@/auth';
+import { authConfig, SESSION_COOKIE, verify, type SessionUser } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
-  const session = await auth();
-  const user = session?.user?.name || session?.user?.email || null;
+  const cfg = authConfig();
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const user = cfg.missing.length ? null : await verify<SessionUser>(token, cfg.secret);
   return (
     <>
       {user && (
-        <form className="userbar" action={async () => { 'use server'; await signOut({ redirectTo: '/signin' }); }}>
-          <span>{user}</span>
-          <button type="submit">Вийти</button>
-        </form>
+        <div className="userbar">
+          <span>{user.name || user.email}</span>
+          <a href="/api/auth/logout">Вийти</a>
+        </div>
       )}
       <Dashboard />
     </>
