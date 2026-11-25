@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { ensureSchema, logSync } from '@/lib/db';
 import { listAccounts } from '@/lib/meta';
 import { syncDaily, syncEntities, syncSegments } from '@/lib/sync';
-import { addDays, yesterdayUtc } from '@/lib/dates';
+import { addDays, monthsBetween, yesterdayUtc } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -24,6 +24,11 @@ export async function GET(req: Request) {
       const entities = await syncEntities(acc);
       const segments = await syncSegments(acc, since, until);
       summary.push(`${acc.id}: ${daily} daily rows, ${entities} entities, ${segments} segment rows`);
+      // A month that starts inside this window is now fully loaded (day 1..yesterday),
+      // so the dashboard's "Історія даних" block doesn't reappear on the 1st of each month.
+      for (const m of monthsBetween(since, until)) {
+        if (m >= since) await logSync('month', true, `${acc.id}|${m}`);
+      }
     }
     const detail = `${since}..${until} | ${summary.join('; ')}`;
     await logSync('cron', true, detail);
